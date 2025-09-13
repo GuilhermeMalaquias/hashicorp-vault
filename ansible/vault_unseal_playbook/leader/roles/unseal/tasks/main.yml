@@ -1,0 +1,35 @@
+- name: Inicializar Vault
+  shell: |
+    vault operator init -key-shares=5 -key-threshold=3 -format=json -ca-cert="{{ vault_tls_path }}/ca.pem" | tee "{{ vault_tls_path }}/keys.json"
+  environment:
+    VAULT_ADDR: "https://{{ vault_ip }}:8200"
+  args:
+    creates: "{{ vault_tls_path }}/keys.json"
+
+
+- name: Ler unseal keys
+  slurp:
+    src: "{{ vault_tls_path }}/keys.json"
+  register: vault_init_file
+
+- name: Decodificar JSON
+  set_fact:
+    vault_init_json: "{{ vault_init_file.content | b64decode | from_json }}"
+
+- name: Fazendo unseal no leader
+  shell: |
+    vault operator unseal -ca-cert="{{ vault_tls_path }}/ca.pem" {{ item }}
+  environment:
+    VAULT_ADDR: "https://{{ vault_ip }}:8200"
+  loop: "{{ vault_init_json.unseal_keys_b64[:3] }}"
+
+
+- name: Mostrar unseal keys
+  debug:
+    msg: "{{ vault_init_json.root_token }}"
+
+- name: Copiar keys para o host (backup)
+  fetch:
+    src: /opt/vault/tls/keys.json
+    dest: ./keys/
+    flat: yes

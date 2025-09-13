@@ -1,0 +1,28 @@
+- name: Instalar dependencias
+  apt:
+    name: jq
+    update_cache: yes
+
+- name: Criar script de unseal
+  copy:
+    dest: /usr/local/bin/vault-unseal.sh
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      export VAULT_ADDR=https://{{ vault_leader_ip }}:8200
+      sealed=$(vault status -ca-cert={{ vault_tls_path }}/ca.pem -format=json | jq -r .sealed)
+      if [ "$sealed" = "false" ]; then
+        export VAULT_ADDR=https://{{ vault_ip }}:8200
+        sealed_self_vault=$(vault status -ca-cert=/opt/vault/tls/ca.pem -format=json | jq -r .sealed)
+        if [ "$sealed_self_vault" = "true" ] && [ -f /opt/vault/keys/keys.json ]; then
+          for key in $(jq -r '.unseal_keys_b64[]' /opt/vault/keys/keys.json); do
+            vault operator unseal -ca-cert={{ vault_tls_path }}/ca.pem "$key"
+          done
+        fi
+      fi
+
+- name: Adicionar cron job para unseal
+  cron:
+    name: "vault_auto_unseal"
+    minute: "*/5"
+    job: "/usr/local/bin/vault-unseal.sh >> /var/log/vault-unseal.log 2>&1"

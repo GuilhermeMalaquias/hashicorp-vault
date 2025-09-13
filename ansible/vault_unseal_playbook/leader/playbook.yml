@@ -1,0 +1,10 @@
+- name: Iniciar vault leader e fazer unseal
+  hosts: all
+  become: true
+
+  vars:
+    vault_tls_path: "/opt/vault/tls"
+    vault_ip: 192.168.122.11
+
+  roles:
+    - unseal

@@ -1,0 +1,73 @@
+---
+- name: Instalar Nginx e dependências
+  apt:
+    name:
+      - nginx
+      - unzip
+    update_cache: yes
+
+- name: Criar diretório para streams-enabled
+  file:
+    path: /etc/nginx/streams-enabled
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configurar redirecionamento HTTP para HTTPS
+  copy:
+    dest: /etc/nginx/sites-available/vault
+    content: |
+      server {
+          listen 80;
+          server_name nginx.vault.local;
+          return 301 https://$host$request_uri;
+      }
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Ativar site Vault
+  file:
+    src: /etc/nginx/sites-available/vault
+    dest: /etc/nginx/sites-enabled/vault
+    state: link
+    force: yes
+  notify: Reload nginx
+
+- name: Remover site padrão do Nginx
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Incluir streams TCP no nginx.conf
+  lineinfile:
+    path: /etc/nginx/nginx.conf
+    insertafter: '# user  nginx;'
+    line: 'include /etc/nginx/streams-enabled/*.conf;'
+
+
+- name: Configurar stream TCP para Vault
+  copy:
+    dest: /etc/nginx/streams-enabled/vault.conf
+    content: |
+      stream {
+          upstream vault_cluster {
+              server 192.168.122.11:8200;
+              server 192.168.122.12:8200;
+              server 192.168.122.13:8200;
+          }
+
+          server {
+              listen 443;
+              proxy_pass vault_cluster;
+          }
+      }
+    mode: '0644'
+  notify: Reload nginx
+
+- name: Reiniciar Nginx para aplicar configurações
+  systemd:
+    name: nginx
+    state: restarted
+    enabled: yes

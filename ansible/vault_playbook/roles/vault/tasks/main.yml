@@ -1,0 +1,121 @@
+
+- name: Instalar dependências básicas
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+      - unzip
+      - openssl
+    update_cache: yes
+
+- name: Criar diretórios necessários
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ vault_tls_path }}"
+    - "{{ vault_config_path }}"
+    - "{{ vault_data_path }}"
+
+- name: Copiar CA para o nó
+  copy:
+    src: "ca.pem"
+    dest: "{{ vault_tls_path }}/ca.pem"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copiar chave privada do Vault
+  copy:
+    src: "{{ vault_node_id }}.key"
+    dest: "{{ vault_tls_path }}/{{ vault_node_id }}-key.pem"
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Copiar certificado do Vault
+  copy:
+    src: "{{ vault_node_id }}.crt"
+    dest: "{{ vault_tls_path }}/{{ vault_node_id }}-cert.pem"
+    owner: root
+    group: root
+    mode: '0644'
+
+
+- name: Baixar e instalar Vault
+  unarchive:
+    src: "https://releases.hashicorp.com/vault/{{ vault_version }}/vault_{{ vault_version }}_linux_amd64.zip"
+    dest: /usr/local/bin/
+    remote_src: yes
+    mode: '0755'
+
+- name: Gerar configuração do Vault
+  copy:
+    dest: "{{ vault_config_path }}/vault.hcl"
+    content: |
+      storage "raft" {
+        path    = "{{ vault_data_path }}"
+        node_id = "{{ vault_node_id }}"
+        retry_join {
+          leader_api_addr = "https://{{ vault_leader_ip }}:8200"
+          leader_ca_cert_file         = "{{ vault_tls_path }}/ca.pem"
+          leader_client_cert_file         = "{{ vault_tls_path }}/{{ vault_node_id }}-cert.pem"
+          leader_client_key_file         = "{{ vault_tls_path }}/{{ vault_node_id }}-key.pem"
+        }
+      }
+
+      listener "tcp" {
+        address            = "0.0.0.0:8200"
+        tls_cert_file      = "{{ vault_tls_path }}/{{ vault_node_id }}-cert.pem"
+        tls_key_file       = "{{ vault_tls_path }}/{{ vault_node_id }}-key.pem"
+        tls_client_ca_file = "{{ vault_tls_path }}/ca.pem"
+      }
+      
+      ui = true
+      disable_mlock = true
+      log_level = "info"
+      max_lease_ttl = "768h"
+      default_lease_ttl = "24h"
+      api_addr     = "https://{{ vault_ip }}:8200"
+      cluster_addr = "https://{{ vault_ip }}:8201"
+
+      
+
+- name: Criar service do Vault
+  copy:
+    dest: /etc/systemd/system/vault.service
+    content: |
+      [Unit]
+      Description=HashiCorp Vault
+      Requires=network-online.target
+      After=network-online.target
+
+      [Service]
+      ExecStart=/usr/local/bin/vault server -config={{ vault_config_path }}/vault.hcl
+      ExecReload=/bin/kill --signal HUP $MAINPID
+      Restart=on-failure
+      RestartSec=5
+      StartLimitBurst=3
+      StartLimitInterval=60s
+      LimitNOFILE=65536
+      LimitMEMLOCK=infinity
+      CapabilityBoundingSet=CAP_IPC_LOCK
+      AmbientCapabilities=CAP_IPC_LOCK
+      User=root
+      Group=root
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Ativar e iniciar Vault
+  systemd:
+    name: vault
+    daemon_reload: yes
+    enabled: yes
+    state: started

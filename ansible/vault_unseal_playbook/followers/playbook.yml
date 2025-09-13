@@ -1,0 +1,9 @@
+- name: Iniciar vault leader e fazer unseal
+  hosts: all
+  become: true
+
+  vars:
+    vault_tls_path: "/opt/vault/tls"
+
+  roles:
+    - unseal
