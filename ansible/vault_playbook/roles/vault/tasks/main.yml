@@ -6,7 +6,6 @@
       - curl
       - gnupg
       - lsb-release
-      - apt-transport-https
       - unzip
       - openssl
     update_cache: yes
