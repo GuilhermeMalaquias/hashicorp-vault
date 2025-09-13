@@ -86,3 +86,8 @@ generate_cert vault-node3 192.168.122.13
 # -------------------- Listar certificados --------------------
 echo "Certificados gerados:"
 ls -l *.key *.crt ca.pem
+
+# -------------------- Iniciar vagrant --------------------
+echo "Iniciando vagrant"
+
+vagrant up --provider=libvirt
