@@ -12,7 +12,8 @@ VAULT_UNSEAL_FOLLOWERS_FILE_DIR="$BASE_DIR/ansible/vault_unseal_playbook/followe
 
 mkdir -p "$CERT_DIR"
 mkdir -p "$VAULT_FILE_DIR"
-mkdir -p "$VAULT_UNSEAL_FILE_DIR"
+mkdir -p "$VAULT_UNSEAL_LEADER_FILE_DIR"
+mkdir -p "$VAULT_UNSEAL_FOLLOWERS_FILE_DIR"
 cd "$CERT_DIR"
 
 echo "Gerando certificados em: $CERT_DIR"
